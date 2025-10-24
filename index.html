@@ -1,0 +1,2084 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบสารสนเทศฐานข้อมูลศิษย์เก่า</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js';
+        import { getDatabase, ref, set, get, push, update, remove, onValue } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCaqEmQyEhPGSYqX3Lq8l0Z5dgrG7kNkiE",
+            authDomain: "canvaai-database-project-dd70c.firebaseapp.com",
+            databaseURL: "https://canvaai-database-project-dd70c-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "canvaai-database-project-dd70c",
+            storageBucket: "canvaai-database-project-dd70c.firebasestorage.app",
+            messagingSenderId: "851493352897",
+            appId: "1:851493352897:web:3523b91e7e5fabcb33ab40",
+            measurementId: "G-Z2X5JRPZ03"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        // Global variables
+        let currentUser = null;
+        let currentUserRole = null;
+
+        // Initialize app
+        window.addEventListener('DOMContentLoaded', function() {
+            showLoginPage();
+            initializeSampleData();
+        });
+
+        // Initialize sample data
+        async function initializeSampleData() {
+            try {
+                // Sample users
+                const usersRef = ref(database, 'users');
+                const usersSnapshot = await get(usersRef);
+                
+                if (!usersSnapshot.exists()) {
+                    const sampleUsers = {
+                        'admin': { username: 'admin', password: 'admin123', role: 'admin', fullname: 'ผู้ดูแลระบบ' },
+                        'staff01': { username: 'staff01', password: 'staff123', role: 'staff', fullname: 'เจ้าหน้าที่ 1' },
+                        'somchai': { username: 'somchai', password: 'somchai123', role: 'alumni', fullname: 'สมชาย พันธุ์' }
+                    };
+                    await set(usersRef, sampleUsers);
+                }
+
+                // Sample alumni data
+                const alumniRef = ref(database, 'alumni');
+                const alumniSnapshot = await get(alumniRef);
+                
+                if (!alumniSnapshot.exists()) {
+                    const sampleAlumni = {
+                        'A001': {
+                            alumni_id: 'A001',
+                            fullname: 'สมชาย พันธุ์',
+                            major: 'วิทยาการคอมพิวเตอร์',
+                            grad_year: '2564',
+                            email: 'somchai@gmail.com',
+                            phone: '081-234-5678',
+                            occupation: 'โปรแกรมเมอร์',
+                            address: 'กรุงเทพมหานคร',
+                            username: 'somchai'
+                        },
+                        'A002': {
+                            alumni_id: 'A002',
+                            fullname: 'สุดา วงศ์',
+                            major: 'การจัดการ',
+                            grad_year: '2563',
+                            email: 'suda@gmail.com',
+                            phone: '082-345-6789',
+                            occupation: 'เจ้าหน้าที่ HR',
+                            address: 'เชียงใหม่',
+                            username: 'suda'
+                        }
+                    };
+                    await set(alumniRef, sampleAlumni);
+                }
+
+                // Sample activities
+                const activitiesRef = ref(database, 'activities');
+                const activitiesSnapshot = await get(activitiesRef);
+                
+                if (!activitiesSnapshot.exists()) {
+                    const sampleActivities = {
+                        'AC001': {
+                            activity_id: 'AC001',
+                            title: 'งานคืนสู่เหย้า 2568',
+                            detail: 'พบปะศิษย์เก่า คณะวิทยาการคอมพิวเตอร์',
+                            date_event: '2025-12-15',
+                            location: 'หอประชุมใหญ่'
+                        },
+                        'AC002': {
+                            activity_id: 'AC002',
+                            title: 'โครงการอบรมอาชีพ',
+                            detail: 'สัมมนาเทคนิคอาชีพสำหรับศิษย์เก่า',
+                            date_event: '2025-07-20',
+                            location: 'ห้องประชุม A'
+                        }
+                    };
+                    await set(activitiesRef, sampleActivities);
+                }
+
+                // Sample news
+                const newsRef = ref(database, 'news');
+                const newsSnapshot = await get(newsRef);
+                
+                if (!newsSnapshot.exists()) {
+                    const sampleNews = {
+                        'N001': {
+                            news_id: 'N001',
+                            title: 'ประกาศงานคืนสู่เหย้า 2568',
+                            content: 'ขอเชิญศิษย์เก่าทุกท่านร่วมงานคืนสู่เหย้าประจำปี 2568',
+                            date_created: '2024-11-15',
+                            author: 'ฝ่ายกิจการศิษย์เก่า'
+                        }
+                    };
+                    await set(newsRef, sampleNews);
+                }
+            } catch (error) {
+                console.error('Error initializing sample data:', error);
+            }
+        }
+
+        // Authentication functions
+        async function login(username, password) {
+            try {
+                const userRef = ref(database, `users/${username}`);
+                const snapshot = await get(userRef);
+                
+                if (snapshot.exists()) {
+                    const userData = snapshot.val();
+                    if (userData.password === password) {
+                        currentUser = username;
+                        currentUserRole = userData.role;
+                        
+                        // Log activity
+                        await logActivity(username, 'เข้าสู่ระบบ');
+                        
+                        return { success: true, role: userData.role, fullname: userData.fullname };
+                    }
+                }
+                return { success: false, message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
+            } catch (error) {
+                console.error('Login error:', error);
+                return { success: false, message: 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ' };
+            }
+        }
+
+        async function register(userData) {
+            try {
+                // Check if username exists
+                const userRef = ref(database, `users/${userData.username}`);
+                const snapshot = await get(userRef);
+                
+                if (snapshot.exists()) {
+                    return { success: false, message: 'ชื่อผู้ใช้นี้มีอยู่แล้ว' };
+                }
+
+                // Create user account
+                await set(userRef, {
+                    username: userData.username,
+                    password: userData.password,
+                    role: 'alumni',
+                    fullname: userData.fullname
+                });
+
+                // Create alumni profile
+                const alumniId = 'A' + Date.now().toString().slice(-6);
+                const alumniRef = ref(database, `alumni/${alumniId}`);
+                await set(alumniRef, {
+                    alumni_id: alumniId,
+                    fullname: userData.fullname,
+                    major: userData.major,
+                    grad_year: userData.grad_year,
+                    email: userData.email,
+                    phone: userData.phone || '',
+                    occupation: userData.occupation || '',
+                    address: userData.address || '',
+                    username: userData.username
+                });
+
+                return { success: true, message: 'สมัครสมาชิกสำเร็จ' };
+            } catch (error) {
+                console.error('Registration error:', error);
+                return { success: false, message: 'เกิดข้อผิดพลาดในการสมัครสมาชิก' };
+            }
+        }
+
+        async function logActivity(username, action) {
+            try {
+                const logRef = ref(database, 'system_logs');
+                const newLogRef = push(logRef);
+                await set(newLogRef, {
+                    username: username,
+                    action: action,
+                    timestamp: new Date().toISOString(),
+                    date: new Date().toLocaleDateString('th-TH')
+                });
+            } catch (error) {
+                console.error('Log activity error:', error);
+            }
+        }
+
+        // UI Functions
+        function showLoginPage() {
+            document.getElementById('app').innerHTML = `
+                <div class="min-h-full bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+                    <div class="max-w-md w-full space-y-8">
+                        <div class="text-center">
+                            <h1 class="text-4xl font-bold text-gray-900 mb-2">🎓</h1>
+                            <h2 class="text-3xl font-bold text-gray-900">ระบบสารสนเทศ</h2>
+                            <p class="text-xl text-gray-600 mt-2">ฐานข้อมูลศิษย์เก่า</p>
+                        </div>
+                        
+                        <div class="bg-white rounded-lg shadow-lg p-8">
+                            <div class="mb-6">
+                                <div class="flex space-x-1 mb-4">
+                                    <button onclick="showLoginForm()" id="loginTab" class="flex-1 py-2 px-4 text-center rounded-lg bg-blue-600 text-white font-medium">เข้าสู่ระบบ</button>
+                                    <button onclick="showRegisterForm()" id="registerTab" class="flex-1 py-2 px-4 text-center rounded-lg bg-gray-200 text-gray-700 font-medium">สมัครสมาชิก</button>
+                                </div>
+                            </div>
+                            
+                            <div id="loginForm">
+                                <form onsubmit="handleLogin(event)">
+                                    <div class="space-y-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อผู้ใช้</label>
+                                            <input type="text" id="loginUsername" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">รหัสผ่าน</label>
+                                            <input type="password" id="loginPassword" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        </div>
+                                        <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 font-medium">เข้าสู่ระบบ</button>
+                                    </div>
+                                </form>
+                                
+                                <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                                    <p class="text-sm text-gray-600 mb-2">บัญชีทดสอบ:</p>
+                                    <div class="text-xs space-y-1">
+                                        <p><strong>ผู้ดูแลระบบ:</strong> admin / admin123</p>
+                                        <p><strong>บุคลากร:</strong> staff01 / staff123</p>
+                                        <p><strong>ศิษย์เก่า:</strong> somchai / somchai123</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div id="registerForm" class="hidden">
+                                <form onsubmit="handleRegister(event)">
+                                    <div class="space-y-4">
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อผู้ใช้</label>
+                                                <input type="text" id="regUsername" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">รหัสผ่าน</label>
+                                                <input type="password" id="regPassword" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อ-นามสกุล</label>
+                                            <input type="text" id="regFullname" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">สาขาวิชา</label>
+                                                <select id="regMajor" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                                    <option value="">เลือกสาขา</option>
+                                                    <option value="วิทยาการคอมพิวเตอร์">วิทยาการคอมพิวเตอร์</option>
+                                                    <option value="การจัดการ">การจัดการ</option>
+                                                    <option value="วิศวกรรม">วิศวกรรม</option>
+                                                    <option value="บัญชี">บัญชี</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">ปีที่จบ</label>
+                                                <select id="regGradYear" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                                    <option value="">เลือกปี</option>
+                                                    <option value="2567">2567</option>
+                                                    <option value="2566">2566</option>
+                                                    <option value="2565">2565</option>
+                                                    <option value="2564">2564</option>
+                                                    <option value="2563">2563</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">อีเมล</label>
+                                            <input type="email" id="regEmail" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        </div>
+                                        <button type="submit" class="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 font-medium">สมัครสมาชิก</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function showLoginForm() {
+            document.getElementById('loginTab').className = 'flex-1 py-2 px-4 text-center rounded-lg bg-blue-600 text-white font-medium';
+            document.getElementById('registerTab').className = 'flex-1 py-2 px-4 text-center rounded-lg bg-gray-200 text-gray-700 font-medium';
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.getElementById('registerForm').classList.add('hidden');
+        }
+
+        function showRegisterForm() {
+            document.getElementById('loginTab').className = 'flex-1 py-2 px-4 text-center rounded-lg bg-gray-200 text-gray-700 font-medium';
+            document.getElementById('registerTab').className = 'flex-1 py-2 px-4 text-center rounded-lg bg-green-600 text-white font-medium';
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('registerForm').classList.remove('hidden');
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            const result = await login(username, password);
+            
+            if (result.success) {
+                showMessage('เข้าสู่ระบบสำเร็จ', 'success');
+                setTimeout(() => {
+                    if (result.role === 'admin') {
+                        showAdminDashboard();
+                    } else if (result.role === 'staff') {
+                        showStaffDashboard();
+                    } else if (result.role === 'alumni') {
+                        showAlumniDashboard();
+                    }
+                }, 1000);
+            } else {
+                showMessage(result.message, 'error');
+            }
+        }
+
+        async function handleRegister(event) {
+            event.preventDefault();
+            
+            const userData = {
+                username: document.getElementById('regUsername').value,
+                password: document.getElementById('regPassword').value,
+                fullname: document.getElementById('regFullname').value,
+                major: document.getElementById('regMajor').value,
+                grad_year: document.getElementById('regGradYear').value,
+                email: document.getElementById('regEmail').value
+            };
+            
+            const result = await register(userData);
+            
+            if (result.success) {
+                showMessage('สมัครสมาชิกสำเร็จ กรุณาเข้าสู่ระบบ', 'success');
+                setTimeout(() => {
+                    showLoginForm();
+                }, 1500);
+            } else {
+                showMessage(result.message, 'error');
+            }
+        }
+
+        function showMessage(message, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
+                type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+            }`;
+            messageDiv.textContent = message;
+            document.body.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 3000);
+        }
+
+        // Alumni Dashboard
+        function showAlumniDashboard() {
+            document.getElementById('app').innerHTML = `
+                <div class="min-h-full bg-gray-50">
+                    <nav class="bg-blue-600 text-white p-4">
+                        <div class="flex justify-between items-center">
+                            <h1 class="text-xl font-bold">👨‍🎓 ระบบศิษย์เก่า</h1>
+                            <button onclick="logout()" class="bg-blue-700 px-4 py-2 rounded hover:bg-blue-800">ออกจากระบบ</button>
+                        </div>
+                    </nav>
+                    
+                    <div class="container mx-auto p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <button onclick="showAlumniProfile()" class="bg-white p-6 rounded-lg shadow hover:shadow-lg text-center">
+                                <div class="text-3xl mb-2">👤</div>
+                                <h3 class="font-semibold">ข้อมูลส่วนตัว</h3>
+                            </button>
+                            <button onclick="showAlumniSearch()" class="bg-white p-6 rounded-lg shadow hover:shadow-lg text-center">
+                                <div class="text-3xl mb-2">🔍</div>
+                                <h3 class="font-semibold">ค้นหาศิษย์เก่า</h3>
+                            </button>
+                            <button onclick="showAlumniNews()" class="bg-white p-6 rounded-lg shadow hover:shadow-lg text-center">
+                                <div class="text-3xl mb-2">📰</div>
+                                <h3 class="font-semibold">ข่าวสาร</h3>
+                            </button>
+                            <button onclick="showAlumniActivities()" class="bg-white p-6 rounded-lg shadow hover:shadow-lg text-center">
+                                <div class="text-3xl mb-2">🎉</div>
+                                <h3 class="font-semibold">กิจกรรม</h3>
+                            </button>
+                        </div>
+                        
+                        <div id="alumniContent" class="bg-white rounded-lg shadow p-6">
+                            <h2 class="text-2xl font-bold mb-4">ยินดีต้อนรับสู่ระบบศิษย์เก่า</h2>
+                            <p class="text-gray-600">เลือกเมนูด้านบนเพื่อใช้งานระบบ</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function showAlumniProfile() {
+            try {
+                const alumniRef = ref(database, 'alumni');
+                const snapshot = await get(alumniRef);
+                let userProfile = null;
+                
+                if (snapshot.exists()) {
+                    const alumniData = snapshot.val();
+                    for (let key in alumniData) {
+                        if (alumniData[key].username === currentUser) {
+                            userProfile = alumniData[key];
+                            break;
+                        }
+                    }
+                }
+                
+                document.getElementById('alumniContent').innerHTML = `
+                    <h2 class="text-2xl font-bold mb-6">ข้อมูลส่วนตัว</h2>
+                    <form onsubmit="updateAlumniProfile(event)">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="md:col-span-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">รูปภาพโปรไฟล์</label>
+                                <div class="flex flex-col items-center">
+                                    <div class="w-32 h-32 bg-gray-200 rounded-full flex items-center justify-center mb-4 overflow-hidden">
+                                        ${userProfile?.profileImage ? 
+                                            `<img src="${userProfile.profileImage}" alt="Profile" class="w-full h-full object-cover">` : 
+                                            '<span class="text-4xl text-gray-400">👤</span>'
+                                        }
+                                    </div>
+                                    <input type="file" id="profileImageInput" accept="image/*" onchange="handleImageUpload(event)" class="hidden">
+                                    <button type="button" onclick="document.getElementById('profileImageInput').click()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 text-sm">เลือกรูปภาพ</button>
+                                    ${userProfile?.profileImage ? 
+                                        '<button type="button" onclick="removeProfileImage()" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 text-sm mt-2">ลบรูปภาพ</button>' : 
+                                        ''
+                                    }
+                                </div>
+                            </div>
+                            <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อ-นามสกุล</label>
+                                    <input type="text" id="profileFullname" value="${userProfile?.fullname || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">สาขาวิชา</label>
+                                    <input type="text" id="profileMajor" value="${userProfile?.major || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">ปีที่จบ</label>
+                                    <input type="text" id="profileGradYear" value="${userProfile?.grad_year || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">อีเมล</label>
+                                    <input type="email" id="profileEmail" value="${userProfile?.email || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">เบอร์โทรศัพท์</label>
+                                    <input type="text" id="profilePhone" value="${userProfile?.phone || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">อาชีพปัจจุบัน</label>
+                                    <input type="text" id="profileOccupation" value="${userProfile?.occupation || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">ที่อยู่</label>
+                                    <textarea id="profileAddress" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">${userProfile?.address || ''}</textarea>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-6">
+                            <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">บันทึกข้อมูล</button>
+                        </div>
+                    </form>
+                `;
+            } catch (error) {
+                console.error('Error loading profile:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดข้อมูล', 'error');
+            }
+        }
+
+        // Image upload functions
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                    showMessage('ขนาดไฟล์ต้องไม่เกิน 5MB', 'error');
+                    return;
+                }
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const imageData = e.target.result;
+                    // Update preview
+                    const preview = document.querySelector('.w-32.h-32');
+                    if (preview) {
+                        preview.innerHTML = `<img src="${imageData}" alt="Profile" class="w-full h-full object-cover">`;
+                    }
+                    // Store in temporary variable
+                    window.tempProfileImage = imageData;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        async function removeProfileImage() {
+            try {
+                const alumniRef = ref(database, 'alumni');
+                const snapshot = await get(alumniRef);
+                let alumniKey = null;
+                
+                if (snapshot.exists()) {
+                    const alumniData = snapshot.val();
+                    for (let key in alumniData) {
+                        if (alumniData[key].username === currentUser) {
+                            alumniKey = key;
+                            break;
+                        }
+                    }
+                }
+                
+                if (alumniKey) {
+                    const specificAlumniRef = ref(database, `alumni/${alumniKey}`);
+                    await update(specificAlumniRef, { profileImage: null });
+                    
+                    await logActivity(currentUser, 'ลบรูปภาพโปรไฟล์');
+                    showMessage('ลบรูปภาพสำเร็จ', 'success');
+                    showAlumniProfile(); // Refresh the profile view
+                }
+            } catch (error) {
+                console.error('Error removing profile image:', error);
+                showMessage('เกิดข้อผิดพลาดในการลบรูปภาพ', 'error');
+            }
+        }
+
+        async function updateAlumniProfile(event) {
+            event.preventDefault();
+            
+            try {
+                const alumniRef = ref(database, 'alumni');
+                const snapshot = await get(alumniRef);
+                let alumniKey = null;
+                
+                if (snapshot.exists()) {
+                    const alumniData = snapshot.val();
+                    for (let key in alumniData) {
+                        if (alumniData[key].username === currentUser) {
+                            alumniKey = key;
+                            break;
+                        }
+                    }
+                }
+                
+                if (alumniKey) {
+                    const updateData = {
+                        fullname: document.getElementById('profileFullname').value,
+                        major: document.getElementById('profileMajor').value,
+                        grad_year: document.getElementById('profileGradYear').value,
+                        email: document.getElementById('profileEmail').value,
+                        phone: document.getElementById('profilePhone').value,
+                        occupation: document.getElementById('profileOccupation').value,
+                        address: document.getElementById('profileAddress').value
+                    };
+                    
+                    // Add profile image if uploaded
+                    if (window.tempProfileImage) {
+                        updateData.profileImage = window.tempProfileImage;
+                        window.tempProfileImage = null; // Clear temp data
+                    }
+                    
+                    const specificAlumniRef = ref(database, `alumni/${alumniKey}`);
+                    await update(specificAlumniRef, updateData);
+                    
+                    await logActivity(currentUser, 'อัปเดตข้อมูลส่วนตัว');
+                    showMessage('บันทึกข้อมูลสำเร็จ', 'success');
+                }
+            } catch (error) {
+                console.error('Error updating profile:', error);
+                showMessage('เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
+            }
+        }
+
+        async function showAlumniSearch() {
+            document.getElementById('alumniContent').innerHTML = `
+                <h2 class="text-2xl font-bold mb-6">ค้นหาศิษย์เก่า</h2>
+                <div class="mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">สาขาวิชา</label>
+                            <select id="searchMajor" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="">ทุกสาขา</option>
+                                <option value="วิทยาการคอมพิวเตอร์">วิทยาการคอมพิวเตอร์</option>
+                                <option value="การจัดการ">การจัดการ</option>
+                                <option value="วิศวกรรม">วิศวกรรม</option>
+                                <option value="บัญชี">บัญชี</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">ปีที่จบ</label>
+                            <select id="searchGradYear" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="">ทุกปี</option>
+                                <option value="2567">2567</option>
+                                <option value="2566">2566</option>
+                                <option value="2565">2565</option>
+                                <option value="2564">2564</option>
+                                <option value="2563">2563</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อ</label>
+                            <input type="text" id="searchName" placeholder="ค้นหาจากชื่อ" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+                    <button onclick="searchAlumni()" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">ค้นหา</button>
+                </div>
+                <div id="searchResults"></div>
+            `;
+            
+            // Load all alumni initially
+            searchAlumni();
+        }
+
+        async function searchAlumni() {
+            try {
+                const alumniRef = ref(database, 'alumni');
+                const snapshot = await get(alumniRef);
+                
+                if (snapshot.exists()) {
+                    const alumniData = snapshot.val();
+                    const searchMajor = document.getElementById('searchMajor').value;
+                    const searchGradYear = document.getElementById('searchGradYear').value;
+                    const searchName = document.getElementById('searchName').value.toLowerCase();
+                    
+                    let filteredAlumni = Object.values(alumniData).filter(alumni => {
+                        const matchMajor = !searchMajor || alumni.major === searchMajor;
+                        const matchYear = !searchGradYear || alumni.grad_year === searchGradYear;
+                        const matchName = !searchName || alumni.fullname.toLowerCase().includes(searchName);
+                        
+                        return matchMajor && matchYear && matchName;
+                    });
+                    
+                    let resultsHTML = `
+                        <h3 class="text-lg font-semibold mb-4">ผลการค้นหา (${filteredAlumni.length} คน)</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    `;
+                    
+                    filteredAlumni.forEach(alumni => {
+                        resultsHTML += `
+                            <div class="bg-gray-50 p-4 rounded-lg">
+                                <div class="flex items-start space-x-4">
+                                    <div class="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
+                                        ${alumni.profileImage ? 
+                                            `<img src="${alumni.profileImage}" alt="Profile" class="w-full h-full object-cover">` : 
+                                            '<span class="text-2xl text-gray-400">👤</span>'
+                                        }
+                                    </div>
+                                    <div class="flex-1">
+                                        <h4 class="font-semibold text-lg">${alumni.fullname}</h4>
+                                        <p class="text-gray-600">สาขา: ${alumni.major}</p>
+                                        <p class="text-gray-600">ปีจบ: ${alumni.grad_year}</p>
+                                        <p class="text-gray-600">อาชีพ: ${alumni.occupation || 'ไม่ระบุ'}</p>
+                                        <p class="text-gray-600">ที่อยู่: ${alumni.address || 'ไม่ระบุ'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    resultsHTML += '</div>';
+                    document.getElementById('searchResults').innerHTML = resultsHTML;
+                } else {
+                    document.getElementById('searchResults').innerHTML = '<p class="text-gray-600">ไม่พบข้อมูลศิษย์เก่า</p>';
+                }
+            } catch (error) {
+                console.error('Error searching alumni:', error);
+                showMessage('เกิดข้อผิดพลาดในการค้นหา', 'error');
+            }
+        }
+
+        async function showAlumniNews() {
+            try {
+                const newsRef = ref(database, 'news');
+                const snapshot = await get(newsRef);
+                
+                let newsHTML = `
+                    <h2 class="text-2xl font-bold mb-6">ข่าวสารและประกาศ</h2>
+                `;
+                
+                if (snapshot.exists()) {
+                    const newsData = snapshot.val();
+                    const newsList = Object.values(newsData);
+                    
+                    newsList.forEach(news => {
+                        newsHTML += `
+                            <div class="bg-gray-50 p-6 rounded-lg mb-4">
+                                <h3 class="text-xl font-semibold mb-2">${news.title}</h3>
+                                <p class="text-gray-600 mb-2">โดย: ${news.author} | วันที่: ${new Date(news.date_created).toLocaleDateString('th-TH')}</p>
+                                <p class="text-gray-800">${news.content}</p>
+                            </div>
+                        `;
+                    });
+                } else {
+                    newsHTML += '<p class="text-gray-600">ไม่มีข่าวสารในขณะนี้</p>';
+                }
+                
+                document.getElementById('alumniContent').innerHTML = newsHTML;
+            } catch (error) {
+                console.error('Error loading news:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดข่าวสาร', 'error');
+            }
+        }
+
+        async function showAlumniActivities() {
+            try {
+                const activitiesRef = ref(database, 'activities');
+                const snapshot = await get(activitiesRef);
+                
+                let activitiesHTML = `
+                    <h2 class="text-2xl font-bold mb-6">กิจกรรมศิษย์เก่า</h2>
+                `;
+                
+                if (snapshot.exists()) {
+                    const activitiesData = snapshot.val();
+                    const activitiesList = Object.values(activitiesData);
+                    
+                    activitiesList.forEach(activity => {
+                        const eventDate = new Date(activity.date_event);
+                        const isUpcoming = eventDate > new Date();
+                        
+                        activitiesHTML += `
+                            <div class="bg-gray-50 p-6 rounded-lg mb-4">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1">
+                                        <h3 class="text-xl font-semibold mb-2">${activity.title}</h3>
+                                        <p class="text-gray-800 mb-2">${activity.detail}</p>
+                                        <p class="text-gray-600">📅 วันที่: ${eventDate.toLocaleDateString('th-TH')}</p>
+                                        <p class="text-gray-600">📍 สถานที่: ${activity.location || 'ไม่ระบุ'}</p>
+                                    </div>
+                                    <div class="ml-4">
+                                        <span class="px-3 py-1 rounded-full text-sm ${isUpcoming ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
+                                            ${isUpcoming ? 'กำลังจะมาถึง' : 'ผ่านไปแล้ว'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    activitiesHTML += '<p class="text-gray-600">ไม่มีกิจกรรมในขณะนี้</p>';
+                }
+                
+                document.getElementById('alumniContent').innerHTML = activitiesHTML;
+            } catch (error) {
+                console.error('Error loading activities:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดกิจกรรม', 'error');
+            }
+        }
+
+        // Staff Dashboard
+        function showStaffDashboard() {
+            document.getElementById('app').innerHTML = `
+                <div class="min-h-full bg-gray-50">
+                    <nav class="bg-green-600 text-white p-4">
+                        <div class="flex justify-between items-center">
+                            <h1 class="text-xl font-bold">👩‍💼 ระบบบุคลากร</h1>
+                            <button onclick="logout()" class="bg-green-700 px-4 py-2 rounded hover:bg-green-800">ออกจากระบบ</button>
+                        </div>
+                    </nav>
+                    
+                    <div class="container mx-auto p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <button onclick="showStaffSearch()" class="bg-white p-6 rounded-lg shadow hover:shadow-lg text-center">
+                                <div class="text-3xl mb-2">🔍</div>
+                                <h3 class="font-semibold">ค้นหาศิษย์เก่า</h3>
+                            </button>
+                            <button onclick="showStaffReports()" class="bg-white p-6 rounded-lg shadow hover:shadow-lg text-center">
+                                <div class="text-3xl mb-2">📊</div>
+                                <h3 class="font-semibold">รายงานสรุป</h3>
+                            </button>
+                            <button onclick="showStaffActivities()" class="bg-white p-6 rounded-lg shadow hover:shadow-lg text-center">
+                                <div class="text-3xl mb-2">🎉</div>
+                                <h3 class="font-semibold">จัดการกิจกรรม</h3>
+                            </button>
+                            <button onclick="showStaffNews()" class="bg-white p-6 rounded-lg shadow hover:shadow-lg text-center">
+                                <div class="text-3xl mb-2">📰</div>
+                                <h3 class="font-semibold">จัดการข่าวสาร</h3>
+                            </button>
+                        </div>
+                        
+                        <div id="staffContent" class="bg-white rounded-lg shadow p-6">
+                            <h2 class="text-2xl font-bold mb-4">ยินดีต้อนรับสู่ระบบบุคลากร</h2>
+                            <p class="text-gray-600">เลือกเมนูด้านบนเพื่อใช้งานระบบ</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function showStaffSearch() {
+            document.getElementById('staffContent').innerHTML = `
+                <h2 class="text-2xl font-bold mb-6">ค้นหาและจัดการข้อมูลศิษย์เก่า</h2>
+                <div class="mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">สาขาวิชา</label>
+                            <select id="staffSearchMajor" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                                <option value="">ทุกสาขา</option>
+                                <option value="วิทยาการคอมพิวเตอร์">วิทยาการคอมพิวเตอร์</option>
+                                <option value="การจัดการ">การจัดการ</option>
+                                <option value="วิศวกรรม">วิศวกรรม</option>
+                                <option value="บัญชี">บัญชี</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">ปีที่จบ</label>
+                            <select id="staffSearchGradYear" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                                <option value="">ทุกปี</option>
+                                <option value="2567">2567</option>
+                                <option value="2566">2566</option>
+                                <option value="2565">2565</option>
+                                <option value="2564">2564</option>
+                                <option value="2563">2563</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">อาชีพ</label>
+                            <input type="text" id="staffSearchOccupation" placeholder="ค้นหาจากอาชีพ" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อ</label>
+                            <input type="text" id="staffSearchName" placeholder="ค้นหาจากชื่อ" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                        </div>
+                    </div>
+                    <button onclick="staffSearchAlumni()" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">ค้นหา</button>
+                </div>
+                <div id="staffSearchResults"></div>
+            `;
+            
+            staffSearchAlumni();
+        }
+
+        async function staffSearchAlumni() {
+            try {
+                const alumniRef = ref(database, 'alumni');
+                const snapshot = await get(alumniRef);
+                
+                if (snapshot.exists()) {
+                    const alumniData = snapshot.val();
+                    const searchMajor = document.getElementById('staffSearchMajor').value;
+                    const searchGradYear = document.getElementById('staffSearchGradYear').value;
+                    const searchOccupation = document.getElementById('staffSearchOccupation').value.toLowerCase();
+                    const searchName = document.getElementById('staffSearchName').value.toLowerCase();
+                    
+                    let filteredAlumni = Object.entries(alumniData).filter(([key, alumni]) => {
+                        const matchMajor = !searchMajor || alumni.major === searchMajor;
+                        const matchYear = !searchGradYear || alumni.grad_year === searchGradYear;
+                        const matchOccupation = !searchOccupation || (alumni.occupation && alumni.occupation.toLowerCase().includes(searchOccupation));
+                        const matchName = !searchName || alumni.fullname.toLowerCase().includes(searchName);
+                        
+                        return matchMajor && matchYear && matchOccupation && matchName;
+                    });
+                    
+                    let resultsHTML = `
+                        <h3 class="text-lg font-semibold mb-4">ผลการค้นหา (${filteredAlumni.length} คน)</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white border border-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อ-นามสกุล</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สาขา</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ปีจบ</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อาชีพ</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อีเมล</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">เบอร์โทร</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                    `;
+                    
+                    filteredAlumni.forEach(([key, alumni]) => {
+                        resultsHTML += `
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${alumni.fullname}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${alumni.major}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${alumni.grad_year}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${alumni.occupation || 'ไม่ระบุ'}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${alumni.email}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${alumni.phone || 'ไม่ระบุ'}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    resultsHTML += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                    
+                    document.getElementById('staffSearchResults').innerHTML = resultsHTML;
+                } else {
+                    document.getElementById('staffSearchResults').innerHTML = '<p class="text-gray-600">ไม่พบข้อมูลศิษย์เก่า</p>';
+                }
+            } catch (error) {
+                console.error('Error searching alumni:', error);
+                showMessage('เกิดข้อผิดพลาดในการค้นหา', 'error');
+            }
+        }
+
+        async function showStaffReports() {
+            try {
+                const alumniRef = ref(database, 'alumni');
+                const snapshot = await get(alumniRef);
+                
+                let reportHTML = `<h2 class="text-2xl font-bold mb-6">รายงานสรุปข้อมูลศิษย์เก่า</h2>`;
+                
+                if (snapshot.exists()) {
+                    const alumniData = snapshot.val();
+                    const alumniList = Object.values(alumniData);
+                    
+                    // สรุปตามปีจบ
+                    const yearStats = {};
+                    const majorStats = {};
+                    const occupationStats = {};
+                    
+                    alumniList.forEach(alumni => {
+                        // ปีจบ
+                        yearStats[alumni.grad_year] = (yearStats[alumni.grad_year] || 0) + 1;
+                        
+                        // สาขา
+                        majorStats[alumni.major] = (majorStats[alumni.major] || 0) + 1;
+                        
+                        // อาชีพ
+                        if (alumni.occupation) {
+                            occupationStats[alumni.occupation] = (occupationStats[alumni.occupation] || 0) + 1;
+                        }
+                    });
+                    
+                    reportHTML += `
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                            <div class="bg-blue-50 p-6 rounded-lg">
+                                <h3 class="text-lg font-semibold mb-4 text-blue-800">สรุปตามปีจบ</h3>
+                    `;
+                    
+                    Object.entries(yearStats).sort().forEach(([year, count]) => {
+                        reportHTML += `<p class="mb-2">ปี ${year}: <span class="font-semibold">${count} คน</span></p>`;
+                    });
+                    
+                    reportHTML += `
+                            </div>
+                            <div class="bg-green-50 p-6 rounded-lg">
+                                <h3 class="text-lg font-semibold mb-4 text-green-800">สรุปตามสาขา</h3>
+                    `;
+                    
+                    Object.entries(majorStats).forEach(([major, count]) => {
+                        reportHTML += `<p class="mb-2">${major}: <span class="font-semibold">${count} คน</span></p>`;
+                    });
+                    
+                    reportHTML += `
+                            </div>
+                            <div class="bg-purple-50 p-6 rounded-lg">
+                                <h3 class="text-lg font-semibold mb-4 text-purple-800">สรุปตามอาชีพ</h3>
+                    `;
+                    
+                    Object.entries(occupationStats).slice(0, 5).forEach(([occupation, count]) => {
+                        reportHTML += `<p class="mb-2">${occupation}: <span class="font-semibold">${count} คน</span></p>`;
+                    });
+                    
+                    reportHTML += `
+                            </div>
+                        </div>
+                        
+                        <div class="bg-gray-50 p-6 rounded-lg">
+                            <h3 class="text-lg font-semibold mb-4">สถิติรวม</h3>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div class="text-center">
+                                    <div class="text-3xl font-bold text-blue-600">${alumniList.length}</div>
+                                    <div class="text-sm text-gray-600">ศิษย์เก่าทั้งหมด</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-3xl font-bold text-green-600">${Object.keys(majorStats).length}</div>
+                                    <div class="text-sm text-gray-600">สาขาวิชา</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-3xl font-bold text-purple-600">${Object.keys(occupationStats).length}</div>
+                                    <div class="text-sm text-gray-600">อาชีพที่แตกต่าง</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-3xl font-bold text-orange-600">${alumniList.filter(a => a.email).length}</div>
+                                    <div class="text-sm text-gray-600">มีข้อมูลอีเมล</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    reportHTML += '<p class="text-gray-600">ไม่มีข้อมูลสำหรับสร้างรายงาน</p>';
+                }
+                
+                document.getElementById('staffContent').innerHTML = reportHTML;
+            } catch (error) {
+                console.error('Error loading reports:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดรายงาน', 'error');
+            }
+        }
+
+        async function showStaffActivities() {
+            document.getElementById('staffContent').innerHTML = `
+                <h2 class="text-2xl font-bold mb-6">จัดการกิจกรรมศิษย์เก่า</h2>
+                
+                <div class="mb-6">
+                    <button onclick="showAddActivityForm()" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">เพิ่มกิจกรรมใหม่</button>
+                </div>
+                
+                <div id="addActivityForm" class="hidden bg-gray-50 p-6 rounded-lg mb-6">
+                    <h3 class="text-lg font-semibold mb-4">เพิ่มกิจกรรมใหม่</h3>
+                    <form onsubmit="addActivity(event)">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อกิจกรรม</label>
+                                <input type="text" id="activityTitle" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">วันที่จัดกิจกรรม</label>
+                                <input type="date" id="activityDate" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">สถานที่</label>
+                                <input type="text" id="activityLocation" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">รายละเอียด</label>
+                            <textarea id="activityDetail" rows="3" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+                        </div>
+                        <div class="flex space-x-4">
+                            <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">บันทึกกิจกรรม</button>
+                            <button type="button" onclick="hideAddActivityForm()" class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600">ยกเลิก</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div id="activitiesList"></div>
+            `;
+            
+            loadStaffActivities();
+        }
+
+        function showAddActivityForm() {
+            document.getElementById('addActivityForm').classList.remove('hidden');
+        }
+
+        function hideAddActivityForm() {
+            document.getElementById('addActivityForm').classList.add('hidden');
+            document.getElementById('addActivityForm').querySelector('form').reset();
+        }
+
+        async function addActivity(event) {
+            event.preventDefault();
+            
+            try {
+                const activityId = 'AC' + Date.now().toString().slice(-6);
+                const activityData = {
+                    activity_id: activityId,
+                    title: document.getElementById('activityTitle').value,
+                    detail: document.getElementById('activityDetail').value,
+                    date_event: document.getElementById('activityDate').value,
+                    location: document.getElementById('activityLocation').value,
+                    created_by: currentUser,
+                    created_date: new Date().toISOString()
+                };
+                
+                const activityRef = ref(database, `activities/${activityId}`);
+                await set(activityRef, activityData);
+                
+                await logActivity(currentUser, 'เพิ่มกิจกรรมใหม่: ' + activityData.title);
+                showMessage('เพิ่มกิจกรรมสำเร็จ', 'success');
+                hideAddActivityForm();
+                loadStaffActivities();
+            } catch (error) {
+                console.error('Error adding activity:', error);
+                showMessage('เกิดข้อผิดพลาดในการเพิ่มกิจกรรม', 'error');
+            }
+        }
+
+        async function loadStaffActivities() {
+            try {
+                const activitiesRef = ref(database, 'activities');
+                const snapshot = await get(activitiesRef);
+                
+                let activitiesHTML = '<h3 class="text-lg font-semibold mb-4">รายการกิจกรรม</h3>';
+                
+                if (snapshot.exists()) {
+                    const activitiesData = snapshot.val();
+                    const activitiesList = Object.entries(activitiesData);
+                    
+                    activitiesHTML += '<div class="space-y-4">';
+                    
+                    activitiesList.forEach(([key, activity]) => {
+                        const eventDate = new Date(activity.date_event);
+                        const isUpcoming = eventDate > new Date();
+                        
+                        activitiesHTML += `
+                            <div class="bg-white border border-gray-200 p-6 rounded-lg">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1">
+                                        <h4 class="text-xl font-semibold mb-2">${activity.title}</h4>
+                                        <p class="text-gray-800 mb-2">${activity.detail}</p>
+                                        <p class="text-gray-600">📅 วันที่: ${eventDate.toLocaleDateString('th-TH')}</p>
+                                        <p class="text-gray-600">📍 สถานที่: ${activity.location || 'ไม่ระบุ'}</p>
+                                    </div>
+                                    <div class="ml-4 flex flex-col space-y-2">
+                                        <span class="px-3 py-1 rounded-full text-sm ${isUpcoming ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
+                                            ${isUpcoming ? 'กำลังจะมาถึง' : 'ผ่านไปแล้ว'}
+                                        </span>
+                                        <button onclick="editActivity('${key}')" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">แก้ไข</button>
+                                        <button onclick="deleteActivity('${key}')" class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">ลบ</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    activitiesHTML += '</div>';
+                } else {
+                    activitiesHTML += '<p class="text-gray-600">ไม่มีกิจกรรมในขณะนี้</p>';
+                }
+                
+                document.getElementById('activitiesList').innerHTML = activitiesHTML;
+            } catch (error) {
+                console.error('Error loading activities:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดกิจกรรม', 'error');
+            }
+        }
+
+        async function editActivity(activityId) {
+            try {
+                const activityRef = ref(database, `activities/${activityId}`);
+                const snapshot = await get(activityRef);
+                
+                if (snapshot.exists()) {
+                    const activity = snapshot.val();
+                    
+                    // Show edit form
+                    document.getElementById('addActivityForm').classList.remove('hidden');
+                    document.getElementById('addActivityForm').innerHTML = `
+                        <h3 class="text-lg font-semibold mb-4">แก้ไขกิจกรรม</h3>
+                        <form onsubmit="updateActivity(event, '${activityId}')">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อกิจกรรม</label>
+                                    <input type="text" id="editActivityTitle" value="${activity.title}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">วันที่จัดกิจกรรม</label>
+                                    <input type="date" id="editActivityDate" value="${activity.date_event}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">สถานที่</label>
+                                    <input type="text" id="editActivityLocation" value="${activity.location || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                                </div>
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">รายละเอียด</label>
+                                <textarea id="editActivityDetail" rows="3" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">${activity.detail}</textarea>
+                            </div>
+                            <div class="flex space-x-4">
+                                <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">บันทึกการแก้ไข</button>
+                                <button type="button" onclick="cancelEditActivity()" class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600">ยกเลิก</button>
+                            </div>
+                        </form>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading activity for edit:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดข้อมูลกิจกรรม', 'error');
+            }
+        }
+
+        async function updateActivity(event, activityId) {
+            event.preventDefault();
+            
+            try {
+                const updateData = {
+                    title: document.getElementById('editActivityTitle').value,
+                    detail: document.getElementById('editActivityDetail').value,
+                    date_event: document.getElementById('editActivityDate').value,
+                    location: document.getElementById('editActivityLocation').value,
+                    updated_by: currentUser,
+                    updated_date: new Date().toISOString()
+                };
+                
+                const activityRef = ref(database, `activities/${activityId}`);
+                await update(activityRef, updateData);
+                
+                await logActivity(currentUser, 'แก้ไขกิจกรรม: ' + updateData.title);
+                showMessage('แก้ไขกิจกรรมสำเร็จ', 'success');
+                cancelEditActivity();
+                loadStaffActivities();
+            } catch (error) {
+                console.error('Error updating activity:', error);
+                showMessage('เกิดข้อผิดพลาดในการแก้ไขกิจกรรม', 'error');
+            }
+        }
+
+        function cancelEditActivity() {
+            document.getElementById('addActivityForm').classList.add('hidden');
+            document.getElementById('addActivityForm').innerHTML = `
+                <h3 class="text-lg font-semibold mb-4">เพิ่มกิจกรรมใหม่</h3>
+                <form onsubmit="addActivity(event)">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อกิจกรรม</label>
+                            <input type="text" id="activityTitle" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">วันที่จัดกิจกรรม</label>
+                            <input type="date" id="activityDate" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">สถานที่</label>
+                            <input type="text" id="activityLocation" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">รายละเอียด</label>
+                        <textarea id="activityDetail" rows="3" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+                    </div>
+                    <div class="flex space-x-4">
+                        <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">บันทึกกิจกรรม</button>
+                        <button type="button" onclick="hideAddActivityForm()" class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600">ยกเลิก</button>
+                    </div>
+                </form>
+            `;
+        }
+
+        async function deleteActivity(activityId) {
+            if (confirm('คุณต้องการลบกิจกรรมนี้หรือไม่?')) {
+                try {
+                    const activityRef = ref(database, `activities/${activityId}`);
+                    await remove(activityRef);
+                    
+                    await logActivity(currentUser, 'ลบกิจกรรม: ' + activityId);
+                    showMessage('ลบกิจกรรมสำเร็จ', 'success');
+                    loadStaffActivities();
+                } catch (error) {
+                    console.error('Error deleting activity:', error);
+                    showMessage('เกิดข้อผิดพลาดในการลบกิจกรรม', 'error');
+                }
+            }
+        }
+
+        async function showStaffNews() {
+            document.getElementById('staffContent').innerHTML = `
+                <h2 class="text-2xl font-bold mb-6">จัดการข่าวสารและประกาศ</h2>
+                
+                <div class="mb-6">
+                    <button onclick="showAddNewsForm()" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">เพิ่มข่าวสารใหม่</button>
+                </div>
+                
+                <div id="addNewsForm" class="hidden bg-gray-50 p-6 rounded-lg mb-6">
+                    <h3 class="text-lg font-semibold mb-4">เพิ่มข่าวสารใหม่</h3>
+                    <form onsubmit="addNews(event)">
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">หัวข้อข่าว</label>
+                            <input type="text" id="newsTitle" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">เนื้อหา</label>
+                            <textarea id="newsContent" rows="5" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+                        </div>
+                        <div class="flex space-x-4">
+                            <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">บันทึกข่าวสาร</button>
+                            <button type="button" onclick="hideAddNewsForm()" class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600">ยกเลิก</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div id="newsList"></div>
+            `;
+            
+            loadStaffNews();
+        }
+
+        function showAddNewsForm() {
+            document.getElementById('addNewsForm').classList.remove('hidden');
+        }
+
+        function hideAddNewsForm() {
+            document.getElementById('addNewsForm').classList.add('hidden');
+            document.getElementById('addNewsForm').querySelector('form').reset();
+        }
+
+        async function addNews(event) {
+            event.preventDefault();
+            
+            try {
+                const newsId = 'N' + Date.now().toString().slice(-6);
+                const newsData = {
+                    news_id: newsId,
+                    title: document.getElementById('newsTitle').value,
+                    content: document.getElementById('newsContent').value,
+                    author: currentUser,
+                    date_created: new Date().toISOString().split('T')[0]
+                };
+                
+                const newsRef = ref(database, `news/${newsId}`);
+                await set(newsRef, newsData);
+                
+                await logActivity(currentUser, 'เพิ่มข่าวสาร: ' + newsData.title);
+                showMessage('เพิ่มข่าวสารสำเร็จ', 'success');
+                hideAddNewsForm();
+                loadStaffNews();
+            } catch (error) {
+                console.error('Error adding news:', error);
+                showMessage('เกิดข้อผิดพลาดในการเพิ่มข่าวสาร', 'error');
+            }
+        }
+
+        async function loadStaffNews() {
+            try {
+                const newsRef = ref(database, 'news');
+                const snapshot = await get(newsRef);
+                
+                let newsHTML = '<h3 class="text-lg font-semibold mb-4">รายการข่าวสาร</h3>';
+                
+                if (snapshot.exists()) {
+                    const newsData = snapshot.val();
+                    const newsList = Object.entries(newsData);
+                    
+                    newsHTML += '<div class="space-y-4">';
+                    
+                    newsList.forEach(([key, news]) => {
+                        newsHTML += `
+                            <div class="bg-white border border-gray-200 p-6 rounded-lg">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1">
+                                        <h4 class="text-xl font-semibold mb-2">${news.title}</h4>
+                                        <p class="text-gray-800 mb-2">${news.content}</p>
+                                        <p class="text-gray-600 text-sm">โดย: ${news.author} | วันที่: ${new Date(news.date_created).toLocaleDateString('th-TH')}</p>
+                                    </div>
+                                    <div class="ml-4 flex flex-col space-y-2">
+                                        <button onclick="editNews('${key}')" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">แก้ไข</button>
+                                        <button onclick="deleteNews('${key}')" class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">ลบ</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    newsHTML += '</div>';
+                } else {
+                    newsHTML += '<p class="text-gray-600">ไม่มีข่าวสารในขณะนี้</p>';
+                }
+                
+                document.getElementById('newsList').innerHTML = newsHTML;
+            } catch (error) {
+                console.error('Error loading news:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดข่าวสาร', 'error');
+            }
+        }
+
+        async function editNews(newsId) {
+            try {
+                const newsRef = ref(database, `news/${newsId}`);
+                const snapshot = await get(newsRef);
+                
+                if (snapshot.exists()) {
+                    const news = snapshot.val();
+                    
+                    // Show edit form
+                    document.getElementById('addNewsForm').classList.remove('hidden');
+                    document.getElementById('addNewsForm').innerHTML = `
+                        <h3 class="text-lg font-semibold mb-4">แก้ไขข่าวสาร</h3>
+                        <form onsubmit="updateNews(event, '${newsId}')">
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">หัวข้อข่าว</label>
+                                <input type="text" id="editNewsTitle" value="${news.title}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">เนื้อหา</label>
+                                <textarea id="editNewsContent" rows="5" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">${news.content}</textarea>
+                            </div>
+                            <div class="flex space-x-4">
+                                <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">บันทึกการแก้ไข</button>
+                                <button type="button" onclick="cancelEditNews()" class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600">ยกเลิก</button>
+                            </div>
+                        </form>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading news for edit:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดข้อมูลข่าวสาร', 'error');
+            }
+        }
+
+        async function updateNews(event, newsId) {
+            event.preventDefault();
+            
+            try {
+                const updateData = {
+                    title: document.getElementById('editNewsTitle').value,
+                    content: document.getElementById('editNewsContent').value,
+                    updated_by: currentUser,
+                    updated_date: new Date().toISOString().split('T')[0]
+                };
+                
+                const newsRef = ref(database, `news/${newsId}`);
+                await update(newsRef, updateData);
+                
+                await logActivity(currentUser, 'แก้ไขข่าวสาร: ' + updateData.title);
+                showMessage('แก้ไขข่าวสารสำเร็จ', 'success');
+                cancelEditNews();
+                loadStaffNews();
+            } catch (error) {
+                console.error('Error updating news:', error);
+                showMessage('เกิดข้อผิดพลาดในการแก้ไขข่าวสาร', 'error');
+            }
+        }
+
+        function cancelEditNews() {
+            document.getElementById('addNewsForm').classList.add('hidden');
+            document.getElementById('addNewsForm').innerHTML = `
+                <h3 class="text-lg font-semibold mb-4">เพิ่มข่าวสารใหม่</h3>
+                <form onsubmit="addNews(event)">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">หัวข้อข่าว</label>
+                        <input type="text" id="newsTitle" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">เนื้อหา</label>
+                        <textarea id="newsContent" rows="5" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+                    </div>
+                    <div class="flex space-x-4">
+                        <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">บันทึกข่าวสาร</button>
+                        <button type="button" onclick="hideAddNewsForm()" class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600">ยกเลิก</button>
+                    </div>
+                </form>
+            `;
+        }
+
+        async function deleteNews(newsId) {
+            if (confirm('คุณต้องการลบข่าวสารนี้หรือไม่?')) {
+                try {
+                    const newsRef = ref(database, `news/${newsId}`);
+                    await remove(newsRef);
+                    
+                    await logActivity(currentUser, 'ลบข่าวสาร: ' + newsId);
+                    showMessage('ลบข่าวสารสำเร็จ', 'success');
+                    loadStaffNews();
+                } catch (error) {
+                    console.error('Error deleting news:', error);
+                    showMessage('เกิดข้อผิดพลาดในการลบข่าวสาร', 'error');
+                }
+            }
+        }
+
+        // Admin Dashboard
+        function showAdminDashboard() {
+            document.getElementById('app').innerHTML = `
+                <div class="min-h-full bg-gray-50">
+                    <nav class="bg-red-600 text-white p-4">
+                        <div class="flex justify-between items-center">
+                            <h1 class="text-xl font-bold">🧑‍💻 ระบบผู้ดูแล</h1>
+                            <button onclick="logout()" class="bg-red-700 px-4 py-2 rounded hover:bg-red-800">ออกจากระบบ</button>
+                        </div>
+                    </nav>
+                    
+                    <div class="container mx-auto p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <button onclick="showAdminUsers()" class="bg-white p-6 rounded-lg shadow hover:shadow-lg text-center">
+                                <div class="text-3xl mb-2">👥</div>
+                                <h3 class="font-semibold">จัดการผู้ใช้</h3>
+                            </button>
+                            <button onclick="showAdminAlumni()" class="bg-white p-6 rounded-lg shadow hover:shadow-lg text-center">
+                                <div class="text-3xl mb-2">🎓</div>
+                                <h3 class="font-semibold">จัดการศิษย์เก่า</h3>
+                            </button>
+                            <button onclick="showAdminLogs()" class="bg-white p-6 rounded-lg shadow hover:shadow-lg text-center">
+                                <div class="text-3xl mb-2">📋</div>
+                                <h3 class="font-semibold">บันทึกกิจกรรม</h3>
+                            </button>
+                            <button onclick="showAdminBackup()" class="bg-white p-6 rounded-lg shadow hover:shadow-lg text-center">
+                                <div class="text-3xl mb-2">💾</div>
+                                <h3 class="font-semibold">สำรองข้อมูล</h3>
+                            </button>
+                        </div>
+                        
+                        <div id="adminContent" class="bg-white rounded-lg shadow p-6">
+                            <h2 class="text-2xl font-bold mb-4">ยินดีต้อนรับสู่ระบบผู้ดูแล</h2>
+                            <p class="text-gray-600">เลือกเมนูด้านบนเพื่อใช้งานระบบ</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function showAdminUsers() {
+            try {
+                const usersRef = ref(database, 'users');
+                const snapshot = await get(usersRef);
+                
+                let usersHTML = `
+                    <h2 class="text-2xl font-bold mb-6">จัดการผู้ใช้งาน</h2>
+                    
+                    <div class="mb-6">
+                        <button onclick="showAddUserForm()" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700">เพิ่มผู้ใช้ใหม่</button>
+                    </div>
+                    
+                    <div id="addUserForm" class="hidden bg-gray-50 p-6 rounded-lg mb-6">
+                        <h3 class="text-lg font-semibold mb-4">เพิ่มผู้ใช้ใหม่</h3>
+                        <form onsubmit="addUser(event)">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อผู้ใช้</label>
+                                    <input type="text" id="newUsername" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">รหัสผ่าน</label>
+                                    <input type="password" id="newPassword" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">บทบาท</label>
+                                    <select id="newRole" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                                        <option value="">เลือกบทบาท</option>
+                                        <option value="admin">ผู้ดูแลระบบ</option>
+                                        <option value="staff">บุคลากร</option>
+                                        <option value="alumni">ศิษย์เก่า</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อ-นามสกุล</label>
+                                <input type="text" id="newFullname" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                            </div>
+                            <div class="flex space-x-4">
+                                <button type="submit" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700">เพิ่มผู้ใช้</button>
+                                <button type="button" onclick="hideAddUserForm()" class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600">ยกเลิก</button>
+                            </div>
+                        </form>
+                    </div>
+                `;
+                
+                if (snapshot.exists()) {
+                    const usersData = snapshot.val();
+                    const usersList = Object.entries(usersData);
+                    
+                    usersHTML += `
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white border border-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อผู้ใช้</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อ-นามสกุล</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">บทบาท</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">การจัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                    `;
+                    
+                    usersList.forEach(([username, user]) => {
+                        const roleText = {
+                            'admin': 'ผู้ดูแลระบบ',
+                            'staff': 'บุคลากร',
+                            'alumni': 'ศิษย์เก่า'
+                        };
+                        
+                        usersHTML += `
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${username}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${user.fullname}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${roleText[user.role] || user.role}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <div class="flex space-x-2">
+                                        <button onclick="editUser('${username}')" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">แก้ไข</button>
+                                        ${username !== 'admin' ? `<button onclick="deleteUser('${username}')" class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">ลบ</button>` : '<span class="text-gray-400 text-xs">ไม่สามารถลบได้</span>'}
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    usersHTML += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    usersHTML += '<p class="text-gray-600">ไม่มีข้อมูลผู้ใช้</p>';
+                }
+                
+                document.getElementById('adminContent').innerHTML = usersHTML;
+            } catch (error) {
+                console.error('Error loading users:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดข้อมูลผู้ใช้', 'error');
+            }
+        }
+
+        function showAddUserForm() {
+            document.getElementById('addUserForm').classList.remove('hidden');
+        }
+
+        function hideAddUserForm() {
+            document.getElementById('addUserForm').classList.add('hidden');
+            document.getElementById('addUserForm').querySelector('form').reset();
+        }
+
+        async function addUser(event) {
+            event.preventDefault();
+            
+            try {
+                const username = document.getElementById('newUsername').value;
+                const password = document.getElementById('newPassword').value;
+                const role = document.getElementById('newRole').value;
+                const fullname = document.getElementById('newFullname').value;
+                
+                // Check if username exists
+                const userRef = ref(database, `users/${username}`);
+                const snapshot = await get(userRef);
+                
+                if (snapshot.exists()) {
+                    showMessage('ชื่อผู้ใช้นี้มีอยู่แล้ว', 'error');
+                    return;
+                }
+                
+                // Create user
+                await set(userRef, {
+                    username: username,
+                    password: password,
+                    role: role,
+                    fullname: fullname
+                });
+                
+                await logActivity(currentUser, 'เพิ่มผู้ใช้ใหม่: ' + username);
+                showMessage('เพิ่มผู้ใช้สำเร็จ', 'success');
+                hideAddUserForm();
+                showAdminUsers();
+            } catch (error) {
+                console.error('Error adding user:', error);
+                showMessage('เกิดข้อผิดพลาดในการเพิ่มผู้ใช้', 'error');
+            }
+        }
+
+        async function editUser(username) {
+            try {
+                const userRef = ref(database, `users/${username}`);
+                const snapshot = await get(userRef);
+                
+                if (snapshot.exists()) {
+                    const user = snapshot.val();
+                    
+                    // Show edit form
+                    document.getElementById('addUserForm').classList.remove('hidden');
+                    document.getElementById('addUserForm').innerHTML = `
+                        <h3 class="text-lg font-semibold mb-4">แก้ไขผู้ใช้</h3>
+                        <form onsubmit="updateUser(event, '${username}')">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อผู้ใช้</label>
+                                    <input type="text" id="editUsername" value="${username}" readonly class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed">
+                                    <p class="text-xs text-gray-500 mt-1">ไม่สามารถแก้ไขชื่อผู้ใช้ได้</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">รหัสผ่านใหม่</label>
+                                    <input type="password" id="editPassword" placeholder="ใส่รหัสผ่านใหม่ (หากต้องการเปลี่ยน)" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">บทบาท</label>
+                                    <select id="editRole" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                                        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>ผู้ดูแลระบบ</option>
+                                        <option value="staff" ${user.role === 'staff' ? 'selected' : ''}>บุคลากร</option>
+                                        <option value="alumni" ${user.role === 'alumni' ? 'selected' : ''}>ศิษย์เก่า</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อ-นามสกุล</label>
+                                <input type="text" id="editFullname" value="${user.fullname}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                            </div>
+                            <div class="flex space-x-4">
+                                <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">บันทึกการแก้ไข</button>
+                                <button type="button" onclick="cancelEditUser()" class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600">ยกเลิก</button>
+                            </div>
+                        </form>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading user for edit:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดข้อมูลผู้ใช้', 'error');
+            }
+        }
+
+        async function updateUser(event, username) {
+            event.preventDefault();
+            
+            try {
+                const updateData = {
+                    fullname: document.getElementById('editFullname').value,
+                    role: document.getElementById('editRole').value
+                };
+                
+                // Only update password if provided
+                const newPassword = document.getElementById('editPassword').value;
+                if (newPassword.trim()) {
+                    updateData.password = newPassword;
+                }
+                
+                const userRef = ref(database, `users/${username}`);
+                await update(userRef, updateData);
+                
+                await logActivity(currentUser, 'แก้ไขผู้ใช้: ' + username);
+                showMessage('แก้ไขผู้ใช้สำเร็จ', 'success');
+                cancelEditUser();
+                showAdminUsers();
+            } catch (error) {
+                console.error('Error updating user:', error);
+                showMessage('เกิดข้อผิดพลาดในการแก้ไขผู้ใช้', 'error');
+            }
+        }
+
+        function cancelEditUser() {
+            document.getElementById('addUserForm').classList.add('hidden');
+            document.getElementById('addUserForm').innerHTML = `
+                <h3 class="text-lg font-semibold mb-4">เพิ่มผู้ใช้ใหม่</h3>
+                <form onsubmit="addUser(event)">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อผู้ใช้</label>
+                            <input type="text" id="newUsername" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">รหัสผ่าน</label>
+                            <input type="password" id="newPassword" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">บทบาท</label>
+                            <select id="newRole" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                                <option value="">เลือกบทบาท</option>
+                                <option value="admin">ผู้ดูแลระบบ</option>
+                                <option value="staff">บุคลากร</option>
+                                <option value="alumni">ศิษย์เก่า</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อ-นามสกุล</label>
+                        <input type="text" id="newFullname" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+                    </div>
+                    <div class="flex space-x-4">
+                        <button type="submit" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700">เพิ่มผู้ใช้</button>
+                        <button type="button" onclick="hideAddUserForm()" class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600">ยกเลิก</button>
+                    </div>
+                </form>
+            `;
+        }
+
+        async function deleteUser(username) {
+            if (confirm('คุณต้องการลบผู้ใช้นี้หรือไม่?')) {
+                try {
+                    const userRef = ref(database, `users/${username}`);
+                    await remove(userRef);
+                    
+                    await logActivity(currentUser, 'ลบผู้ใช้: ' + username);
+                    showMessage('ลบผู้ใช้สำเร็จ', 'success');
+                    showAdminUsers();
+                } catch (error) {
+                    console.error('Error deleting user:', error);
+                    showMessage('เกิดข้อผิดพลาดในการลบผู้ใช้', 'error');
+                }
+            }
+        }
+
+        async function showAdminAlumni() {
+            try {
+                const alumniRef = ref(database, 'alumni');
+                const snapshot = await get(alumniRef);
+                
+                let alumniHTML = `<h2 class="text-2xl font-bold mb-6">จัดการข้อมูลศิษย์เก่า</h2>`;
+                
+                if (snapshot.exists()) {
+                    const alumniData = snapshot.val();
+                    const alumniList = Object.entries(alumniData);
+                    
+                    alumniHTML += `
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white border border-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">รหัส</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อ-นามสกุล</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สาขา</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ปีจบ</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อีเมล</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">การจัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                    `;
+                    
+                    alumniList.forEach(([key, alumni]) => {
+                        alumniHTML += `
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${alumni.alumni_id}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${alumni.fullname}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${alumni.major}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${alumni.grad_year}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${alumni.email}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <button onclick="deleteAlumni('${key}')" class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">ลบ</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    alumniHTML += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    alumniHTML += '<p class="text-gray-600">ไม่มีข้อมูลศิษย์เก่า</p>';
+                }
+                
+                document.getElementById('adminContent').innerHTML = alumniHTML;
+            } catch (error) {
+                console.error('Error loading alumni:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดข้อมูลศิษย์เก่า', 'error');
+            }
+        }
+
+        async function deleteAlumni(alumniKey) {
+            if (confirm('คุณต้องการลบข้อมูลศิษย์เก่านี้หรือไม่?')) {
+                try {
+                    const alumniRef = ref(database, `alumni/${alumniKey}`);
+                    await remove(alumniRef);
+                    
+                    await logActivity(currentUser, 'ลบข้อมูลศิษย์เก่า: ' + alumniKey);
+                    showMessage('ลบข้อมูลศิษย์เก่าสำเร็จ', 'success');
+                    showAdminAlumni();
+                } catch (error) {
+                    console.error('Error deleting alumni:', error);
+                    showMessage('เกิดข้อผิดพลาดในการลบข้อมูลศิษย์เก่า', 'error');
+                }
+            }
+        }
+
+        async function showAdminLogs() {
+            try {
+                const logsRef = ref(database, 'system_logs');
+                const snapshot = await get(logsRef);
+                
+                let logsHTML = `<h2 class="text-2xl font-bold mb-6">บันทึกกิจกรรมระบบ</h2>`;
+                
+                if (snapshot.exists()) {
+                    const logsData = snapshot.val();
+                    const logsList = Object.entries(logsData).reverse(); // แสดงล่าสุดก่อน
+                    
+                    logsHTML += `
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white border border-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">วันที่</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">เวลา</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ผู้ใช้</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">กิจกรรม</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                    `;
+                    
+                    logsList.slice(0, 50).forEach(([key, log]) => { // แสดงแค่ 50 รายการล่าสุด
+                        const timestamp = new Date(log.timestamp);
+                        logsHTML += `
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${timestamp.toLocaleDateString('th-TH')}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${timestamp.toLocaleTimeString('th-TH')}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${log.username}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${log.action}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    logsHTML += `
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="text-sm text-gray-500 mt-4">แสดง 50 รายการล่าสุด</p>
+                    `;
+                } else {
+                    logsHTML += '<p class="text-gray-600">ไม่มีบันทึกกิจกรรม</p>';
+                }
+                
+                document.getElementById('adminContent').innerHTML = logsHTML;
+            } catch (error) {
+                console.error('Error loading logs:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดบันทึกกิจกรรม', 'error');
+            }
+        }
+
+        async function showAdminBackup() {
+            document.getElementById('adminContent').innerHTML = `
+                <h2 class="text-2xl font-bold mb-6">สำรองและกู้คืนข้อมูล</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-blue-50 p-6 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-4 text-blue-800">สำรองข้อมูล</h3>
+                        <p class="text-gray-600 mb-4">ดาวน์โหลดข้อมูลทั้งหมดในระบบเป็นไฟล์ JSON</p>
+                        <button onclick="backupData()" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">สำรองข้อมูล</button>
+                    </div>
+                    
+                    <div class="bg-green-50 p-6 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-4 text-green-800">สถิติระบบ</h3>
+                        <div id="systemStats">กำลังโหลด...</div>
+                    </div>
+                </div>
+                
+                <div class="mt-6 bg-yellow-50 p-6 rounded-lg">
+                    <h3 class="text-lg font-semibold mb-4 text-yellow-800">⚠️ คำเตือน</h3>
+                    <p class="text-gray-700">การสำรองข้อมูลจะดาวน์โหลดข้อมูลทั้งหมดในระบบ รวมถึงรหัสผ่านที่เข้ารหัส กรุณาเก็บไฟล์สำรองในที่ปลอดภัย</p>
+                </div>
+            `;
+            
+            loadSystemStats();
+        }
+
+        async function loadSystemStats() {
+            try {
+                const [usersSnapshot, alumniSnapshot, activitiesSnapshot, newsSnapshot, logsSnapshot] = await Promise.all([
+                    get(ref(database, 'users')),
+                    get(ref(database, 'alumni')),
+                    get(ref(database, 'activities')),
+                    get(ref(database, 'news')),
+                    get(ref(database, 'system_logs'))
+                ]);
+                
+                const stats = {
+                    users: usersSnapshot.exists() ? Object.keys(usersSnapshot.val()).length : 0,
+                    alumni: alumniSnapshot.exists() ? Object.keys(alumniSnapshot.val()).length : 0,
+                    activities: activitiesSnapshot.exists() ? Object.keys(activitiesSnapshot.val()).length : 0,
+                    news: newsSnapshot.exists() ? Object.keys(newsSnapshot.val()).length : 0,
+                    logs: logsSnapshot.exists() ? Object.keys(logsSnapshot.val()).length : 0
+                };
+                
+                document.getElementById('systemStats').innerHTML = `
+                    <div class="space-y-2">
+                        <p>👥 ผู้ใช้ทั้งหมด: <span class="font-semibold">${stats.users} คน</span></p>
+                        <p>🎓 ศิษย์เก่า: <span class="font-semibold">${stats.alumni} คน</span></p>
+                        <p>🎉 กิจกรรม: <span class="font-semibold">${stats.activities} รายการ</span></p>
+                        <p>📰 ข่าวสาร: <span class="font-semibold">${stats.news} รายการ</span></p>
+                        <p>📋 บันทึกกิจกรรม: <span class="font-semibold">${stats.logs} รายการ</span></p>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading system stats:', error);
+                document.getElementById('systemStats').innerHTML = '<p class="text-red-600">เกิดข้อผิดพลาดในการโหลดสถิติ</p>';
+            }
+        }
+
+        async function backupData() {
+            try {
+                showMessage('กำลังสำรองข้อมูล...', 'success');
+                
+                const [usersSnapshot, alumniSnapshot, activitiesSnapshot, newsSnapshot, logsSnapshot] = await Promise.all([
+                    get(ref(database, 'users')),
+                    get(ref(database, 'alumni')),
+                    get(ref(database, 'activities')),
+                    get(ref(database, 'news')),
+                    get(ref(database, 'system_logs'))
+                ]);
+                
+                const backupData = {
+                    backup_date: new Date().toISOString(),
+                    users: usersSnapshot.exists() ? usersSnapshot.val() : {},
+                    alumni: alumniSnapshot.exists() ? alumniSnapshot.val() : {},
+                    activities: activitiesSnapshot.exists() ? activitiesSnapshot.val() : {},
+                    news: newsSnapshot.exists() ? newsSnapshot.val() : {},
+                    system_logs: logsSnapshot.exists() ? logsSnapshot.val() : {}
+                };
+                
+                const dataStr = JSON.stringify(backupData, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(dataBlob);
+                link.download = `alumni_system_backup_${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+                
+                await logActivity(currentUser, 'สำรองข้อมูลระบบ');
+                showMessage('สำรองข้อมูลสำเร็จ', 'success');
+            } catch (error) {
+                console.error('Error backing up data:', error);
+                showMessage('เกิดข้อผิดพลาดในการสำรองข้อมูล', 'error');
+            }
+        }
+
+        function logout() {
+            currentUser = null;
+            currentUserRole = null;
+            showLoginPage();
+        }
+
+        // Make functions global
+        window.showLoginForm = showLoginForm;
+        window.showRegisterForm = showRegisterForm;
+        window.handleLogin = handleLogin;
+        window.handleRegister = handleRegister;
+        window.logout = logout;
+        
+        // Alumni functions
+        window.showAlumniProfile = showAlumniProfile;
+        window.showAlumniSearch = showAlumniSearch;
+        window.showAlumniNews = showAlumniNews;
+        window.showAlumniActivities = showAlumniActivities;
+        window.updateAlumniProfile = updateAlumniProfile;
+        window.searchAlumni = searchAlumni;
+        window.handleImageUpload = handleImageUpload;
+        window.removeProfileImage = removeProfileImage;
+        
+        // Staff functions
+        window.showStaffSearch = showStaffSearch;
+        window.showStaffReports = showStaffReports;
+        window.showStaffActivities = showStaffActivities;
+        window.showStaffNews = showStaffNews;
+        window.staffSearchAlumni = staffSearchAlumni;
+        window.showAddActivityForm = showAddActivityForm;
+        window.hideAddActivityForm = hideAddActivityForm;
+        window.addActivity = addActivity;
+        window.editActivity = editActivity;
+        window.updateActivity = updateActivity;
+        window.cancelEditActivity = cancelEditActivity;
+        window.deleteActivity = deleteActivity;
+        window.showAddNewsForm = showAddNewsForm;
+        window.hideAddNewsForm = hideAddNewsForm;
+        window.addNews = addNews;
+        window.editNews = editNews;
+        window.updateNews = updateNews;
+        window.cancelEditNews = cancelEditNews;
+        window.deleteNews = deleteNews;
+        
+        // Admin functions
+        window.showAdminUsers = showAdminUsers;
+        window.showAdminAlumni = showAdminAlumni;
+        window.showAdminLogs = showAdminLogs;
+        window.showAdminBackup = showAdminBackup;
+        window.showAddUserForm = showAddUserForm;
+        window.hideAddUserForm = hideAddUserForm;
+        window.addUser = addUser;
+        window.editUser = editUser;
+        window.updateUser = updateUser;
+        window.cancelEditUser = cancelEditUser;
+        window.deleteUser = deleteUser;
+        window.deleteAlumni = deleteAlumni;
+        window.backupData = backupData;
+    </script>
+    <style>
+        body {
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div id="app"></div>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'99389854663ed01e',t:'MTc2MTI5OTY5MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
